@@ -22,7 +22,10 @@ import {
 
 export default function Leads() {
   const navigate = useNavigate();
-  const { leads, addLead, searchQuery, setSearchQuery } = useCrmStore();
+  const { leads, addLead, deleteLead, searchQuery, setSearchQuery } = useCrmStore();
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Local filter states
   const [selectedSource, setSelectedSource] = useState('All Sources');
@@ -391,17 +394,20 @@ export default function Leads() {
                           >
                             <Phone className="w-3.5 h-3.5" />
                           </a>
-                          <button
-                            type="button"
-                            className="p-1.5 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
-                            title="Message client"
+                          <a
+                            href={`https://wa.me/${(lead.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${lead.name}, this is from LensFlow Studio regarding your ${lead.event} enquiry!`)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                            title="WhatsApp"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                          </button>
+                          </a>
                           <button
                             type="button"
-                            className="p-1.5 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
-                            title="More options"
+                            onClick={() => setDeleteTarget(lead)}
+                            className="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title="Delete lead"
                           >
                             <MoreHorizontal className="w-3.5 h-3.5" />
                           </button>
@@ -604,6 +610,38 @@ export default function Leads() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-rose-500" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Delete Lead?</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  This will permanently delete <strong>{deleteTarget.name}</strong> and all their activity. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await deleteLead(deleteTarget.id);
+                  setDeleteTarget(null);
+                }}
+                className="px-4 py-2 text-sm font-semibold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition"
+              >
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

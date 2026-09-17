@@ -230,4 +230,44 @@ export const useCrmStore = create((set, get) => ({
       .update({ paid: Number(paidAmount) || 0 })
       .eq('id', projectId);
   },
+
+  updateLead: async (id, updatedFields) => {
+    // Map camelCase to snake_case for DB
+    const dbFields = {};
+    if (updatedFields.name !== undefined) dbFields.name = updatedFields.name;
+    if (updatedFields.phone !== undefined) dbFields.phone = updatedFields.phone;
+    if (updatedFields.email !== undefined) dbFields.email = updatedFields.email;
+    if (updatedFields.source !== undefined) dbFields.source = updatedFields.source;
+    if (updatedFields.handle !== undefined) dbFields.handle = updatedFields.handle;
+    if (updatedFields.event !== undefined) dbFields.event = updatedFields.event;
+    if (updatedFields.eventDate !== undefined) dbFields.event_date = updatedFields.eventDate;
+    if (updatedFields.location !== undefined) dbFields.location = updatedFields.location;
+    if (updatedFields.guests !== undefined) dbFields.guests = Number(updatedFields.guests);
+    if (updatedFields.requirements !== undefined) dbFields.requirements = updatedFields.requirements;
+    if (updatedFields.budget !== undefined) dbFields.budget = Number(updatedFields.budget);
+    if (updatedFields.quotation !== undefined) dbFields.quotation = updatedFields.quotation ? Number(updatedFields.quotation) : null;
+    if (updatedFields.advance !== undefined) dbFields.advance = Number(updatedFields.advance);
+    if (updatedFields.status !== undefined) dbFields.status = updatedFields.status;
+    if (updatedFields.nextFollowUp !== undefined) dbFields.next_follow_up = updatedFields.nextFollowUp;
+
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, ...updatedFields } : lead
+      ),
+    }));
+
+    await supabase.from('leads').update(dbFields).eq('id', id);
+  },
+
+  deleteLead: async (id) => {
+    // Optimistic update — remove from local state immediately
+    set((state) => ({
+      leads: state.leads.filter((lead) => lead.id !== id),
+      projects: state.projects.filter((proj) => proj.leadId !== id),
+    }));
+
+    // Delete from DB (cascade will remove activities and projects)
+    await supabase.from('leads').delete().eq('id', id);
+  },
 }));

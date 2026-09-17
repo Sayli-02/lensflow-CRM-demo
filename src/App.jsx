@@ -14,12 +14,15 @@ import FollowUps from './pages/FollowUps';
 import Calendar from './pages/Calendar';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import QuotationView from './pages/QuotationView';
+import ClientPortal from './pages/ClientPortal';
 
 export default function App() {
   return (
     <Routes>
-      {/* Public Login Route */}
+      {/* Public Routes — no login needed */}
       <Route path="/login" element={<Login />} />
+      <Route path="/portal/:projectId" element={<ClientPortal />} />
 
       {/* Protected Routes wrapped in AppShell */}
       <Route
@@ -33,6 +36,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/leads/:id" element={<LeadDetails />} />
+        <Route path="/leads/:id/quotation" element={<QuotationView />} />
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/projects" element={<Projects />} />

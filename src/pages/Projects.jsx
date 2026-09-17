@@ -12,6 +12,8 @@ import {
   ExternalLink,
   Kanban,
   Check,
+  MessageSquare,
+  Eye,
 } from 'lucide-react';
 import { useCrmStore } from '../store/useCrmStore';
 
@@ -72,6 +74,21 @@ export default function Projects() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [selectedProject, setSelectedProject] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const handleWhatsAppShare = (project, lead) => {
+    const url = `${window.location.origin}/portal/${project.id}`;
+    const clientName = project.name.split(' ')[0];
+    const message = encodeURIComponent(
+      `Hi ${clientName}! 📸 Here is your project progress tracker from LensFlow Studio.\n\nYou can track your ${project.event} milestones and payment summary here:\n${url}\n\nFeel free to reach out if you have any questions!`
+    );
+    const phone = lead?.phone ? lead.phone.replace(/\D/g, '') : '';
+    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  };
+
+  const handlePreviewPortal = (project) => {
+    window.open(`/portal/${project.id}`, '_blank');
+  };
 
   // Avatar palette
   const avatarColors = [
@@ -288,19 +305,44 @@ export default function Projects() {
                         </div>
                       </td>
 
-                      {/* View Action */}
-                      <td className="py-3 px-4 text-right pr-6">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedProject(project)}
-                          className="px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-amber-700 border border-slate-200/80 rounded-lg text-xs font-medium transition shadow-2xs cursor-pointer"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                       {/* Actions */}
+                       <td className="py-3 px-4 text-right pr-6">
+                         <div className="flex items-center justify-end gap-2">
+                           {/* WhatsApp Share — sends portal link to client */}
+                           <button
+                             type="button"
+                             onClick={() => {
+                               const lead = useCrmStore.getState().leads.find(l => l.id === project.leadId);
+                               handleWhatsAppShare(project, lead);
+                             }}
+                             title="Send portal link via WhatsApp"
+                             className="px-3 py-1 border rounded-lg text-xs font-medium transition shadow-2xs cursor-pointer flex items-center gap-1 bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200"
+                           >
+                             <MessageSquare className="w-3 h-3" />
+                             WhatsApp
+                           </button>
+                           {/* Preview — opens portal in new tab */}
+                           <button
+                             type="button"
+                             onClick={() => handlePreviewPortal(project)}
+                             title="Preview client portal"
+                             className="px-3 py-1 border rounded-lg text-xs font-medium transition shadow-2xs cursor-pointer flex items-center gap-1 bg-white hover:bg-indigo-50 text-indigo-700 border-indigo-200"
+                           >
+                             <Eye className="w-3 h-3" />
+                             Preview
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => setSelectedProject(project)}
+                             className="px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-amber-700 border border-slate-200/80 rounded-lg text-xs font-medium transition shadow-2xs cursor-pointer"
+                           >
+                             View
+                           </button>
+                         </div>
+                       </td>
+                     </tr>
+                   );
+                 })}
               </tbody>
             </table>
           </div>
