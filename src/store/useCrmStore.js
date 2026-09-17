@@ -15,7 +15,6 @@ export const useCrmStore = create((set, get) => ({
   fetchData: async () => {
     set({ isLoading: true });
 
-    // Fetch leads and their activities
     const { data: leadsData, error: leadsError } = await supabase
       .from('leads')
       .select(`*, lead_activities (*)`)
@@ -23,7 +22,6 @@ export const useCrmStore = create((set, get) => ({
 
     if (leadsError) console.error('Error fetching leads:', leadsError);
 
-    // Map database snake_case back to frontend camelCase
     const formattedLeads = (leadsData || []).map((lead) => ({
       id: lead.id,
       name: lead.name,
@@ -42,13 +40,13 @@ export const useCrmStore = create((set, get) => ({
       status: lead.status,
       nextFollowUp: lead.next_follow_up,
       createdAt: lead.created_at,
+      archived: lead.archived || false,
       activity: (lead.lead_activities || []).map((act) => ({
         date: act.date,
         note: act.note,
       })),
     }));
 
-    // Fetch projects
     const { data: projectsData, error: projectsError } = await supabase
       .from('projects')
       .select('*')
@@ -74,30 +72,20 @@ export const useCrmStore = create((set, get) => ({
       },
     }));
 
-    set({
-      leads: formattedLeads,
-      projects: formattedProjects,
-      isLoading: false,
-    });
+    set({ leads: formattedLeads, projects: formattedProjects, isLoading: false });
   },
 
   updateLeadStatus: async (id, newStatus) => {
-    // Optimistic update
     set((state) => ({
       leads: state.leads.map((lead) =>
         lead.id === id ? { ...lead, status: newStatus } : lead
       ),
     }));
-
-    // DB update
     await supabase.from('leads').update({ status: newStatus }).eq('id', id);
-
-    // If booked, create project if not exists
     if (newStatus === 'Booked') {
       const state = get();
       const lead = state.leads.find((l) => l.id === id);
       const projectExists = state.projects.some((p) => p.leadId === id);
-
       if (lead && !projectExists) {
         const { data: newProj } = await supabase
           .from('projects')
@@ -112,18 +100,13 @@ export const useCrmStore = create((set, get) => ({
           })
           .select()
           .single();
-
-        if (newProj) {
-          get().fetchData(); // Reload to get the new project with correct ID
-        }
+        if (newProj) get().fetchData();
       }
     }
   },
 
   addLead: async (leadData) => {
     const today = new Date().toISOString().split('T')[0];
-
-    // DB insert
     const { data: newLead } = await supabase
       .from('leads')
       .insert({
@@ -142,6 +125,7 @@ export const useCrmStore = create((set, get) => ({
         advance: Number(leadData.advance) || 0,
         status: leadData.status || 'New',
         next_follow_up: leadData.nextFollowUp || null,
+        archived: false,
       })
       .select()
       .single();
@@ -152,8 +136,6 @@ export const useCrmStore = create((set, get) => ({
         note: 'Lead created',
         date: today,
       });
-
-      // If booked, create project
       if (newLead.status === 'Booked') {
         await supabase.from('projects').insert({
           lead_id: newLead.id,
@@ -165,21 +147,14 @@ export const useCrmStore = create((set, get) => ({
           paid: newLead.advance || 0,
         });
       }
-
-      get().fetchData(); // Reload data
+      get().fetchData();
     }
   },
 
   addActivity: async (leadId, note) => {
     const today = new Date().toISOString().split('T')[0];
-
-    await supabase.from('lead_activities').insert({
-      lead_id: leadId,
-      note,
-      date: today,
-    });
-
-    get().fetchData(); // Reload
+    await supabase.from('lead_activities').insert({ lead_id: leadId, note, date: today });
+    get().fetchData();
   },
 
   setNextFollowUp: async (leadId, date) => {
@@ -199,23 +174,15 @@ export const useCrmStore = create((set, get) => ({
       album: 'milestone_album',
       finalDelivery: 'milestone_final_delivery',
     };
-
     set((state) => ({
       projects: state.projects.map((proj) =>
         proj.id === projectId
-          ? {
-              ...proj,
-              milestones: { ...proj.milestones, [milestoneKey]: isCompleted },
-            }
+          ? { ...proj, milestones: { ...proj.milestones, [milestoneKey]: isCompleted } }
           : proj
       ),
     }));
-
     if (columnMap[milestoneKey]) {
-      await supabase
-        .from('projects')
-        .update({ [columnMap[milestoneKey]]: isCompleted })
-        .eq('id', projectId);
+      await supabase.from('projects').update({ [columnMap[milestoneKey]]: isCompleted }).eq('id', projectId);
     }
   },
 
@@ -225,14 +192,10 @@ export const useCrmStore = create((set, get) => ({
         proj.id === projectId ? { ...proj, paid: Number(paidAmount) || 0 } : proj
       ),
     }));
-    await supabase
-      .from('projects')
-      .update({ paid: Number(paidAmount) || 0 })
-      .eq('id', projectId);
+    await supabase.from('projects').update({ paid: Number(paidAmount) || 0 }).eq('id', projectId);
   },
 
   updateLead: async (id, updatedFields) => {
-    // Map camelCase to snake_case for DB
     const dbFields = {};
     if (updatedFields.name !== undefined) dbFields.name = updatedFields.name;
     if (updatedFields.phone !== undefined) dbFields.phone = updatedFields.phone;
@@ -250,24 +213,66 @@ export const useCrmStore = create((set, get) => ({
     if (updatedFields.status !== undefined) dbFields.status = updatedFields.status;
     if (updatedFields.nextFollowUp !== undefined) dbFields.next_follow_up = updatedFields.nextFollowUp;
 
-    // Optimistic update
     set((state) => ({
       leads: state.leads.map((lead) =>
         lead.id === id ? { ...lead, ...updatedFields } : lead
       ),
     }));
-
     await supabase.from('leads').update(dbFields).eq('id', id);
   },
 
   deleteLead: async (id) => {
-    // Optimistic update — remove from local state immediately
     set((state) => ({
       leads: state.leads.filter((lead) => lead.id !== id),
       projects: state.projects.filter((proj) => proj.leadId !== id),
     }));
-
-    // Delete from DB (cascade will remove activities and projects)
     await supabase.from('leads').delete().eq('id', id);
+  },
+
+  // ── Archive / Restore ─────────────────────────────────────────────────────
+  archiveLead: async (id) => {
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, archived: true } : lead
+      ),
+    }));
+    await supabase.from('leads').update({ archived: true }).eq('id', id);
+  },
+
+  restoreLead: async (id) => {
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, archived: false } : lead
+      ),
+    }));
+    await supabase.from('leads').update({ archived: false }).eq('id', id);
+  },
+
+  // ── Bulk Actions ──────────────────────────────────────────────────────────
+  bulkArchive: async (ids) => {
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        ids.includes(lead.id) ? { ...lead, archived: true } : lead
+      ),
+    }));
+    await supabase.from('leads').update({ archived: true }).in('id', ids);
+  },
+
+  bulkRestore: async (ids) => {
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        ids.includes(lead.id) ? { ...lead, archived: false } : lead
+      ),
+    }));
+    await supabase.from('leads').update({ archived: false }).in('id', ids);
+  },
+
+  bulkUpdateStatus: async (ids, newStatus) => {
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        ids.includes(lead.id) ? { ...lead, status: newStatus } : lead
+      ),
+    }));
+    await supabase.from('leads').update({ status: newStatus }).in('id', ids);
   },
 }));

@@ -11,6 +11,12 @@ import {
   FilterX,
   X,
   Sparkles,
+  Archive,
+  ArchiveRestore,
+  CheckSquare,
+  Square,
+  Trash2,
+  Tag,
 } from 'lucide-react';
 import { useCrmStore } from '../store/useCrmStore';
 import {
@@ -22,7 +28,14 @@ import {
 
 export default function Leads() {
   const navigate = useNavigate();
-  const { leads, addLead, deleteLead, searchQuery, setSearchQuery } = useCrmStore();
+  const { leads, addLead, deleteLead, archiveLead, restoreLead, bulkArchive, bulkRestore, bulkUpdateStatus, searchQuery, setSearchQuery } = useCrmStore();
+
+  // View tab: 'active' | 'archived'
+  const [activeTab, setActiveTab] = useState('active');
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkStatusValue, setBulkStatusValue] = useState('');
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -83,10 +96,13 @@ export default function Leads() {
     'bg-sky-100 text-sky-700',
   ];
 
-  // Combined AND live filtering
+  // Combined AND live filtering — respects activeTab
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
-      // Search query (name, email, or phone)
+      // Archive tab filter
+      if (activeTab === 'archived' && !lead.archived) return false;
+      if (activeTab === 'active' && lead.archived) return false;
+
       const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
         !q ||
@@ -94,21 +110,32 @@ export default function Leads() {
         (lead.email && lead.email.toLowerCase().includes(q)) ||
         (lead.phone && lead.phone.toLowerCase().includes(q));
 
-      // Source Filter
       const matchesSource =
         selectedSource === 'All Sources' || lead.source === selectedSource;
-
-      // Status Filter
       const matchesStatus =
         selectedStatus === 'All Status' || lead.status === selectedStatus;
-
-      // Event Type Filter
       const matchesEvent =
         selectedEventType === 'All Event Types' || lead.event === selectedEventType;
 
       return matchesSearch && matchesSource && matchesStatus && matchesEvent;
     });
-  }, [leads, searchQuery, selectedSource, selectedStatus, selectedEventType]);
+  }, [leads, searchQuery, selectedSource, selectedStatus, selectedEventType, activeTab]);
+
+  // Selection helpers
+  const allPageSelected = paginatedLeads => paginatedLeads.length > 0 && paginatedLeads.every(l => selectedIds.has(l.id));
+  const toggleOne = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleAll = (pageLeads) => {
+    if (allPageSelected(pageLeads)) {
+      setSelectedIds(prev => { const n = new Set(prev); pageLeads.forEach(l => n.delete(l.id)); return n; });
+    } else {
+      setSelectedIds(prev => { const n = new Set(prev); pageLeads.forEach(l => n.add(l.id)); return n; });
+    }
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   // Reset to page 1 if filtered results change
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / itemsPerPage));
@@ -172,14 +199,37 @@ export default function Leads() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Leads</h1>
           <p className="text-sm text-slate-500 mt-0.5">Manage and track all your enquiries from different platforms.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium rounded-xl shadow-sm transition self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Add Lead</span>
-        </button>
+        {activeTab === 'active' && (
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium rounded-xl shadow-sm transition self-start sm:self-auto cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add Lead</span>
+          </button>
+        )}
+      </div>
+
+      {/* Tabs: Active / Archived */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        {['active', 'archived'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setActiveTab(tab); clearSelection(); }}
+            className={`px-4 py-1.5 rounded-lg text-sm font-semibold capitalize transition ${
+              activeTab === tab
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab === 'active' ? (
+              <span className="flex items-center gap-1.5">Active <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{leads.filter(l => !l.archived).length}</span></span>
+            ) : (
+              <span className="flex items-center gap-1.5"><Archive className="w-3.5 h-3.5" /> Archived <span className="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">{leads.filter(l => l.archived).length}</span></span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Search & Filters Row */}
@@ -281,18 +331,24 @@ export default function Leads() {
           /* Empty State */
           <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
-              <Search className="w-5 h-5" />
+              {activeTab === 'archived' ? <Archive className="w-5 h-5" /> : <Search className="w-5 h-5" />}
             </div>
-            <h3 className="text-base font-semibold text-slate-800">No leads match your filters</h3>
+            <h3 className="text-base font-semibold text-slate-800">
+              {activeTab === 'archived' ? 'No archived leads' : 'No leads match your filters'}
+            </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Try adjusting your search keywords or clearing active dropdown filters.
+              {activeTab === 'archived'
+                ? 'Archived leads will be safely kept here and can be restored back to active at any time.'
+                : 'Try adjusting your search keywords or clearing active dropdown filters.'}
             </p>
-            <button
-              onClick={handleClearFilters}
-              className="mt-4 px-3.5 py-1.5 bg-[#FDF3E7] hover:bg-[#faebd7] text-amber-800 text-xs font-medium rounded-lg transition"
-            >
-              Clear filters
-            </button>
+            {activeTab === 'active' && (
+              <button
+                onClick={handleClearFilters}
+                className="mt-4 px-3.5 py-1.5 bg-[#FDF3E7] hover:bg-[#faebd7] text-amber-800 text-xs font-medium rounded-lg transition"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           /* Leads Table */
@@ -300,7 +356,12 @@ export default function Leads() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                  <th className="py-3.5 px-5">Client</th>
+                  <th className="py-3.5 pl-4 pr-2 w-8">
+                    <button onClick={() => toggleAll(paginatedLeads)} className="text-slate-400 hover:text-slate-700 transition">
+                      {allPageSelected(paginatedLeads) ? <CheckSquare className="w-4 h-4 text-amber-500" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">Client</th>
                   <th className="py-3.5 px-4">Source</th>
                   <th className="py-3.5 px-4">Event Type</th>
                   <th className="py-3.5 px-4">Date</th>
@@ -324,14 +385,23 @@ export default function Leads() {
                     <tr
                       key={lead.id}
                       onClick={() => navigate(`/leads/${lead.id}`)}
-                      className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                      className={`hover:bg-slate-50/70 transition-colors cursor-pointer group ${
+                        selectedIds.has(lead.id) ? 'bg-amber-50/50' : ''
+                      }`}
                     >
+                      {/* Checkbox */}
+                      <td className="py-3 pl-4 pr-2" onClick={(e) => { e.stopPropagation(); toggleOne(lead.id); }}>
+                        <div className={`transition-opacity duration-150 ${selectedIds.has(lead.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                          {selectedIds.has(lead.id)
+                            ? <CheckSquare className="w-4 h-4 text-amber-500" />
+                            : <Square className="w-4 h-4 text-slate-400 hover:text-slate-600 transition" />}
+                        </div>
+                      </td>
+
                       {/* Client */}
-                      <td className="py-3 px-5">
+                      <td className="py-3 px-3">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0 ${colorClass}`}
-                          >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0 ${colorClass}`}>
                             {initials}
                           </div>
                           <div>
@@ -339,48 +409,27 @@ export default function Leads() {
                               {lead.name}
                             </span>
                             {lead.phone && (
-                              <span className="text-[11px] text-slate-400 font-normal">
-                                {lead.phone}
-                              </span>
+                              <span className="text-[11px] text-slate-400 font-normal">{lead.phone}</span>
                             )}
                           </div>
                         </div>
                       </td>
 
-                      {/* Source (Plain text per reference) */}
-                      <td className="py-3 px-4 text-slate-600 font-medium">
-                        {lead.source}
-                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{lead.source}</td>
+                      <td className="py-3 px-4 text-slate-600">{lead.event}</td>
+                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{formatEventDate(lead.eventDate)}</td>
 
-                      {/* Event Type */}
-                      <td className="py-3 px-4 text-slate-600">
-                        {lead.event}
-                      </td>
-
-                      {/* Event Date */}
-                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                        {formatEventDate(lead.eventDate)}
-                      </td>
-
-                      {/* Status Pill */}
                       <td className="py-3 px-4">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium leading-normal ${statusPillClass}`}
-                        >
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium leading-normal ${statusPillClass}`}>
                           {lead.status}
                         </span>
                       </td>
 
-                      {/* Next Follow-up */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         {followUp.isToday ? (
-                          <span className="font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
-                            Today
-                          </span>
+                          <span className="font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Today</span>
                         ) : (
-                          <span className="text-slate-500 font-normal">
-                            {followUp.text}
-                          </span>
+                          <span className="text-slate-500 font-normal">{followUp.text}</span>
                         )}
                       </td>
 
@@ -403,14 +452,26 @@ export default function Leads() {
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(lead)}
-                            className="p-1.5 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                            title="Delete lead"
-                          >
-                            <MoreHorizontal className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Archive / Restore toggle */}
+                          {lead.archived ? (
+                            <button
+                              type="button"
+                              onClick={() => restoreLead(lead.id)}
+                              className="p-1.5 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                              title="Restore lead"
+                            >
+                              <ArchiveRestore className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => archiveLead(lead.id)}
+                              className="p-1.5 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                              title="Archive lead"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -645,6 +706,84 @@ export default function Leads() {
           </div>
         </div>
       )}
+
+      {/* ── Floating Bulk Action Bar ── */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center gap-3 bg-slate-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700/80 backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="flex items-center gap-2.5 border-r border-slate-700/80 pr-3">
+            <span className="text-xs font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+              {selectedIds.size}
+            </span>
+            <span className="text-xs font-medium text-slate-200">
+              {selectedIds.size === 1 ? '1 lead selected' : `${selectedIds.size} leads selected`}
+            </span>
+            <button
+              onClick={clearSelection}
+              className="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-md"
+              title="Deselect all"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Update Status Dropdown */}
+          <div className="flex items-center gap-2">
+            <Tag className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={bulkStatusValue}
+              onChange={async (e) => {
+                const val = e.target.value;
+                if (!val) return;
+                await bulkUpdateStatus(Array.from(selectedIds), val);
+                setBulkStatusValue('');
+                clearSelection();
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-xs text-slate-100 rounded-xl px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer transition"
+            >
+              <option value="" disabled>Update Status...</option>
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Archive / Restore Selected */}
+          {activeTab === 'active' ? (
+            <button
+              onClick={async () => {
+                await bulkArchive(Array.from(selectedIds));
+                clearSelection();
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl transition"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>Archive Selected</span>
+            </button>
+          ) : (
+            <button
+              onClick={async () => {
+                await bulkRestore(Array.from(selectedIds));
+                clearSelection();
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition"
+            >
+              <ArchiveRestore className="w-3.5 h-3.5" />
+              <span>Restore Selected</span>
+            </button>
+          )}
+
+          {/* Deselect button */}
+          <button
+            onClick={clearSelection}
+            className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
+          >
+            Deselect
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
