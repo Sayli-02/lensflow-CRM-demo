@@ -22,9 +22,14 @@ import { useCrmStore } from '../../store/useCrmStore';
 export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, searchQuery, setSearchQuery } = useCrmStore();
+  const { logout, searchQuery, setSearchQuery, fetchData } = useCrmStore();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
